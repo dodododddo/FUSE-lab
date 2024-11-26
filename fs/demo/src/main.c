@@ -44,9 +44,9 @@ static void* demo_mount(struct fuse_conn_info * conn_info){
 
 
     /* 填充super信息 */
-    super.sz_io = /* TODO */;
-    super.sz_disk = /* TODO */;
-    super.sz_blks = /* TODO */; 
+    ddriver_ioctl(super.driver_fd, IOC_REQ_DEVICE_IO_SZ, &super.sz_io);
+    ddriver_ioctl(super.driver_fd, IOC_REQ_DEVICE_SIZE, &super.sz_disk);
+    super.sz_blks = super.sz_disk / super.sz_io;
 
     return 0;
 }
@@ -63,16 +63,23 @@ static int demo_readdir(const char* path, void* buf, fuse_fill_dir_t filler, off
     // 此处任务一同学无需关注demo_readdir的传入参数，也不要使用到上述参数
 
     char filename[128]; // 待填充的
+    struct demo_dentry dentry;
+    char temp_buf[512];
+    off_t off = 500 * super.sz_io * 2;  // 第500逻辑块的偏移量
 
     /* 根据超级块的信息，从第500逻辑块读取一个dentry，ls将只固定显示这个文件名 */
 
     /* TODO: 计算磁盘偏移off，并根据磁盘偏移off调用ddriver_seek移动磁盘头到磁盘偏移off处 */
+    ddriver_seek(super.driver_fd, off, SEEK_SET);
 
     /* TODO: 调用ddriver_read读出一个磁盘块到内存，512B */
+    ddriver_read(super.driver_fd, temp_buf, super.sz_io);
 
     /* TODO: 使用memcpy拷贝上述512B的前sizeof(demo_dentry)字节构建一个demo_dentry结构 */
+    memcpy(&dentry, temp_buf, sizeof(struct demo_dentry));
 
     /* TODO: 填充filename */
+    strcpy(filename, dentry.fname);
 
     // 此处大家先不关注filler，已经帮同学写好，同学填充好filename即可
     return filler(buf, filename, NULL, 0);
@@ -84,7 +91,7 @@ static int demo_getattr(const char* path, struct stat *stbuf)
     if(strcmp(path, "/") == 0)
         stbuf->st_mode = DEMO_DEFAULT_PERM | S_IFDIR;            // 根目录是目录文件
     else
-        stbuf->st_mode = /* TODO: 显示为普通文件 */;            // 该文件显示为普通文件
+        stbuf->st_mode = S_IFREG;            // 该文件显示为普通文件
     return 0;
 }
 
