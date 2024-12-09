@@ -20,19 +20,19 @@ struct newfs_super newfs_super;
  * SECTION: FUSE操作定义
  *******************************************************************************/
 static struct fuse_operations operations = {
-    .init = newfs_init,       /* mount文件系统 */
-    .destroy = newfs_destroy, /* umount文件系统 */
-    .mkdir = newfs_mkdir,     /* 建目录，mkdir */
-    .getattr = newfs_getattr, /* 获取文件属性，类似stat，必须完成 */
-    .readdir = newfs_readdir, /* 填充dentrys */
-    .mknod = newfs_mknod,     /* 创建文件，touch相关 */
-    .write = newfs_write,            /* 写入文件 */
-    .read = newfs_read,             /* 读文件 */
-    .utimens = newfs_utimens, /* 修改时间，忽略，避免touch报错 */
-    .truncate = newfs_truncate,         /* 改变文件大小 */
-    .unlink = newfs_unlink,           /* 删除文件 */
-    .rmdir = newfs_rmdir,            /* 删除目录， rm -r */
-    .rename = newfs_rename,           /* 重命名，mv */
+    .init = newfs_init,         /* mount文件系统 */
+    .destroy = newfs_destroy,   /* umount文件系统 */
+    .mkdir = newfs_mkdir,       /* 建目录，mkdir */
+    .getattr = newfs_getattr,   /* 获取文件属性，类似stat，必须完成 */
+    .readdir = newfs_readdir,   /* 填充dentrys */
+    .mknod = newfs_mknod,       /* 创建文件，touch相关 */
+    .write = newfs_write,       /* 写入文件 */
+    .read = newfs_read,         /* 读文件 */
+    .utimens = newfs_utimens,   /* 修改时间，忽略，避免touch报错 */
+    .truncate = newfs_truncate, /* 改变文件大小 */
+    .unlink = newfs_unlink,     /* 删除文件 */
+    .rmdir = newfs_rmdir,       /* 删除目录， rm -r */
+    .rename = newfs_rename,     /* 重命名，mv */
 
     .open = newfs_open,
     .opendir = newfs_opendir,
@@ -184,7 +184,15 @@ int newfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t off
     boolean is_find, is_root;
     int cur_dir = offset;
 
-    struct newfs_dentry *dentry = newfs_lookup(path, &is_find, &is_root);
+    struct newfs_dentry *dentry;
+    if (fi->flags & fi->fh)
+    {
+        dentry = (struct newfs_dentry *)fi->fh;
+    }
+    else
+    {
+        dentry = newfs_lookup(path, &is_find, &is_root);
+    }
     struct newfs_dentry *sub_dentry;
     struct newfs_inode *inode;
     if (is_find)
@@ -273,7 +281,15 @@ int newfs_write(const char *path, const char *buf, size_t size, off_t offset,
                 struct fuse_file_info *fi)
 {
     boolean is_find, is_root;
-    struct newfs_dentry *dentry = newfs_lookup(path, &is_find, &is_root);
+    struct newfs_dentry *dentry;
+    if (fi->flags & fi->fh)
+    {
+        dentry = (struct newfs_dentry *)fi->fh;
+    }
+    else
+    {
+        dentry = newfs_lookup(path, &is_find, &is_root);
+    }
     struct newfs_inode *inode;
 
     if (!is_find)
@@ -344,7 +360,15 @@ int newfs_read(const char *path, char *buf, size_t size, off_t offset,
                struct fuse_file_info *fi)
 {
     boolean is_find, is_root;
-    struct newfs_dentry *dentry = newfs_lookup(path, &is_find, &is_root);
+    struct newfs_dentry *dentry;
+    if (fi->flags & fi->fh)
+    {
+        dentry = (struct newfs_dentry *)fi->fh;
+    }
+    else
+    {
+        dentry = newfs_lookup(path, &is_find, &is_root);
+    }
     struct newfs_inode *inode;
 
     if (!is_find)
@@ -396,27 +420,31 @@ int newfs_read(const char *path, char *buf, size_t size, off_t offset,
  * @param path 相对于挂载点的路径
  * @return int 0成功，否则返回对应错误号
  */
-int newfs_unlink(const char *path) {
+int newfs_unlink(const char *path)
+{
     boolean is_find, is_root;
     struct newfs_dentry *dentry = newfs_lookup(path, &is_find, &is_root);
     struct newfs_inode *inode;
-    
-    if (is_find == FALSE) {
+
+    if (is_find == FALSE)
+    {
         return -NEWFS_ERROR_NOTFOUND;
     }
 
-    if (is_root) {
-        return -NEWFS_ERROR_INVAL;  // 不能删除根目录
+    if (is_root)
+    {
+        return -NEWFS_ERROR_INVAL; // 不能删除根目录
     }
 
     inode = dentry->inode;
-    if (NEWFS_IS_DIR(inode)) {
-        return -NEWFS_ERROR_ISDIR;  // 不能用unlink删除目录
+    if (NEWFS_IS_DIR(inode))
+    {
+        return -NEWFS_ERROR_ISDIR; // 不能用unlink删除目录
     }
 
-    newfs_drop_inode(inode);                         // 删除inode及其对应的数据块
-    newfs_drop_dentry(dentry->parent->inode, dentry);// 从父目录的目录项链表中删除该目录项
-    
+    newfs_drop_inode(inode);                          // 删除inode及其对应的数据块
+    newfs_drop_dentry(dentry->parent->inode, dentry); // 从父目录的目录项链表中删除该目录项
+
     return NEWFS_ERROR_NONE;
 }
 
@@ -432,33 +460,105 @@ int newfs_unlink(const char *path) {
  * @param path 相对于挂载点的路径
  * @return int 0成功，否则返回对应错误号
  */
-int newfs_rmdir(const char *path) {
+int newfs_rmdir(const char *path)
+{
     boolean is_find, is_root;
     struct newfs_dentry *dentry = newfs_lookup(path, &is_find, &is_root);
     struct newfs_inode *inode;
-    
-    if (is_find == FALSE) {
+
+    if (is_find == FALSE)
+    {
         return -NEWFS_ERROR_NOTFOUND;
     }
 
-    if (is_root) {
-        return -NEWFS_ERROR_INVAL;  // 不能删除根目录
+    if (is_root)
+    {
+        return -NEWFS_ERROR_INVAL; // 不能删除根目录
     }
 
     inode = dentry->inode;
-    if (!NEWFS_IS_DIR(inode)) {
-        return -NEWFS_ERROR_NOTDIR;  // 不是目录
+    if (!NEWFS_IS_DIR(inode))
+    {
+        return -NEWFS_ERROR_NOTDIR; // 不是目录
     }
 
-    if (inode->dir_cnt != 0) {
-        return -NEWFS_ERROR_NOTEMPTY;  // 目录不为空
+    if (inode->dir_cnt != 0)
+    {
+        return -NEWFS_ERROR_NOTEMPTY; // 目录不为空
     }
 
-    newfs_drop_inode(inode);                         // 删除inode及其对应的数据块
-    newfs_drop_dentry(dentry->parent->inode, dentry);// 从父目录的目录项链表中删除该目录项
-    
+    newfs_drop_inode(inode);                          // 删除inode及其对应的数据块
+    newfs_drop_dentry(dentry->parent->inode, dentry); // 从父目录的目录项链表中删除该目录项
+
     return NEWFS_ERROR_NONE;
 }
+
+// /**
+//  * @brief 递归删除目录及其内容
+//  * 
+//  * @param dentry 要删除的目录项
+//  * @return int 0成功，否则返回错误码
+//  */
+// static int newfs_rmdir_recursive(struct newfs_dentry *dentry) {
+//     struct newfs_inode *inode = dentry->inode;
+//     struct newfs_dentry *sub_dentry;
+//     struct newfs_dentry *next_dentry;
+    
+//     if (!NEWFS_IS_DIR(inode)) {
+//         // 如果是文件，直接删除
+//         newfs_drop_inode(inode);
+//         return NEWFS_ERROR_NONE;
+//     }
+    
+//     // 递归删除所有子项
+//     sub_dentry = inode->dentrys;
+//     while (sub_dentry) {
+//         next_dentry = sub_dentry->brother;  // 保存下一个兄弟节点，因为当前节点会被删除
+//         int ret = newfs_rmdir_recursive(sub_dentry);
+//         if (ret != NEWFS_ERROR_NONE) {
+//             return ret;
+//         }
+//         sub_dentry = next_dentry;
+//     }
+    
+//     // 删除当前目录的inode和dentry
+//     newfs_drop_inode(inode);
+//     return NEWFS_ERROR_NONE;
+// }
+
+// /**
+//  * @brief 删除目录
+//  * 
+//  * @param path 相对于挂载点的路径
+//  * @return int 0成功，否则返回对应错误号
+//  */
+// int newfs_rmdir(const char *path) {
+//     boolean is_find, is_root;
+//     struct newfs_dentry *dentry = newfs_lookup(path, &is_find, &is_root);
+    
+//     if (!is_find) {
+//         return -NEWFS_ERROR_NOTFOUND;
+//     }
+
+//     if (is_root) {
+//         return -NEWFS_ERROR_INVAL;  // 不能删除根目录
+//     }
+
+//     if (!NEWFS_IS_DIR(dentry->inode)) {
+//         return -NEWFS_ERROR_NOTDIR;
+//     }
+
+//     // 递归删除目录及其内容
+//     int ret = newfs_rmdir_recursive(dentry);
+//     if (ret != NEWFS_ERROR_NONE) {
+//         return ret;
+//     }
+
+//     // 从父目录中移除当前目录项
+//     newfs_drop_dentry(dentry->parent->inode, dentry);
+    
+//     return NEWFS_ERROR_NONE;
+// }
 
 /**
  * @brief 重命名文件
@@ -471,40 +571,45 @@ int newfs_rename(const char *from, const char *to)
 {
     /* 选做 */
     int ret = NEWFS_ERROR_NONE;
-	boolean	is_find, is_root;
-	struct newfs_dentry* from_dentry = newfs_lookup(from, &is_find, &is_root);
-	struct newfs_inode*  from_inode;
-	struct newfs_dentry* to_dentry;
-	mode_t mode = 0;
-	if (is_find == FALSE) {
-		return -NEWFS_ERROR_NOTFOUND;
-	}
+    boolean is_find, is_root;
+    struct newfs_dentry *from_dentry = newfs_lookup(from, &is_find, &is_root);
+    struct newfs_inode *from_inode;
+    struct newfs_dentry *to_dentry;
+    mode_t mode = 0;
+    if (is_find == FALSE)
+    {
+        return -NEWFS_ERROR_NOTFOUND;
+    }
 
-	if (strcmp(from, to) == 0) {
-		return NEWFS_ERROR_NONE;
-	}
+    if (strcmp(from, to) == 0)
+    {
+        return NEWFS_ERROR_NONE;
+    }
 
-	from_inode = from_dentry->inode;
-	
-	if (NEWFS_IS_DIR(from_inode)) {
-		mode = S_IFDIR;
-	}
-	else if (NEWFS_IS_REG(from_inode)) {
-		mode = S_IFREG;
-	}
-	
-	ret = newfs_mknod(to, mode, NULL);
-	if (ret != NEWFS_ERROR_NONE) {					  /* 保证目的文件不存在 */
-		return ret;
-	}
-	
-	to_dentry = newfs_lookup(to, &is_find, &is_root);	  
-	newfs_drop_inode(to_dentry->inode);				  /* 保证生成的inode被释放 */	
-	to_dentry->ino = from_inode->ino;				  /* 指向新的inode */
-	to_dentry->inode = from_inode;
-	
-	newfs_drop_dentry(from_dentry->parent->inode, from_dentry);
-	return ret;
+    from_inode = from_dentry->inode;
+
+    if (NEWFS_IS_DIR(from_inode))
+    {
+        mode = S_IFDIR;
+    }
+    else if (NEWFS_IS_REG(from_inode))
+    {
+        mode = S_IFREG;
+    }
+
+    ret = newfs_mknod(to, mode, NULL);
+    if (ret != NEWFS_ERROR_NONE)
+    { /* 保证目的文件不存在 */
+        return ret;
+    }
+
+    to_dentry = newfs_lookup(to, &is_find, &is_root);
+    newfs_drop_inode(to_dentry->inode); /* 保证生成的inode被释放 */
+    to_dentry->ino = from_inode->ino;   /* 指向新的inode */
+    to_dentry->inode = from_inode;
+
+    newfs_drop_dentry(from_dentry->parent->inode, from_dentry);
+    return ret;
 }
 
 /**
@@ -515,8 +620,16 @@ int newfs_rename(const char *from, const char *to)
  * @param fi 文件信息
  * @return int 0成功，否则返回对应错误号
  */
-int newfs_open(const char *path, struct fuse_file_info *fi)
-{
+int newfs_open(const char *path, struct fuse_file_info *fi) {
+    boolean is_find, is_root;
+    struct newfs_dentry *dentry = newfs_lookup(path, &is_find, &is_root);
+    if (!is_find) {
+        return -NEWFS_ERROR_NOTFOUND;
+    }
+
+    // 统一存储dentry
+    fi->flags = 1;
+    fi->fh = (uint64_t)dentry;
     return NEWFS_ERROR_NONE;
 }
 
@@ -527,8 +640,20 @@ int newfs_open(const char *path, struct fuse_file_info *fi)
  * @param fi 文件信息
  * @return int 0成功，否则返回对应错误号
  */
-int newfs_opendir(const char *path, struct fuse_file_info *fi)
-{
+int newfs_opendir(const char *path, struct fuse_file_info *fi) {
+    boolean is_find, is_root;
+    struct newfs_dentry *dentry = newfs_lookup(path, &is_find, &is_root);
+    if (!is_find) {
+        return -NEWFS_ERROR_NOTFOUND;
+    }
+
+    if (!NEWFS_IS_DIR(dentry->inode)) {
+        return -NEWFS_ERROR_NOTDIR;
+    }
+
+    // 同样存储dentry
+    fi->flags = 1;
+    fi->fh = (uint64_t)dentry;
     return NEWFS_ERROR_NONE;
 }
 
@@ -539,30 +664,34 @@ int newfs_opendir(const char *path, struct fuse_file_info *fi)
  * @param offset 改变后文件大小
  * @return int 0成功，否则返回对应错误号
  */
-int newfs_truncate(const char *path, off_t offset) {
+int newfs_truncate(const char *path, off_t offset)
+{
     boolean is_find, is_root;
-    
+
     // 1. 查找文件
     struct newfs_dentry *dentry = newfs_lookup(path, &is_find, &is_root);
-    if (!is_find) {
+    if (!is_find)
+    {
         return -NEWFS_ERROR_NOTFOUND;
     }
-    
+
     // 2. 检查是否为目录
     struct newfs_inode *inode = dentry->inode;
-    if (NEWFS_IS_DIR(inode)) {
+    if (NEWFS_IS_DIR(inode))
+    {
         return -NEWFS_ERROR_ISDIR;
     }
-    
+
     // 3. 检查新大小是否需要的数据块数超出限制
     int new_blks = NEWFS_ROUND_UP(offset, NEWFS_BLK_SZ()) / NEWFS_BLK_SZ();
-    if (new_blks > NEWFS_DATA_PER_FILE) {
+    if (new_blks > NEWFS_DATA_PER_FILE)
+    {
         return -NEWFS_ERROR_NOSPACE;
     }
-    
+
     // 4. 更新文件大小
     inode->size = offset;
-    
+
     return NEWFS_ERROR_NONE;
 }
 
