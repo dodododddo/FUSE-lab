@@ -151,6 +151,8 @@ struct newfs_inode* newfs_alloc_inode(struct newfs_dentry * dentry) {
     int bit_cursor  = 0; 
     int ino_cursor  = 0;
     boolean is_find_free_entry = FALSE;
+
+    
     /* 检查位图是否有空位 */
     for (byte_cursor = 0; byte_cursor < NEWFS_BLKS_SZ(newfs_super.map_inode_blks); 
          byte_cursor++)
@@ -184,6 +186,9 @@ struct newfs_inode* newfs_alloc_inode(struct newfs_dentry * dentry) {
     inode->dir_cnt = 0;
     inode->dentrys = NULL;
     
+    for (int i = 0; i < NEWFS_DATA_PER_FILE; i++){
+        inode->block_pointer[i] = -1;
+    }
     // inode指向文件类型，则分配数据指针
     if (NEWFS_IS_REG(inode)) {
         for (int i = 0; i < NEWFS_DATA_PER_FILE; i++) {
@@ -255,7 +260,7 @@ int newfs_sync_inode(struct newfs_inode * inode) {
     }
     else if (NEWFS_IS_REG(inode)) { /* 如果当前inode是文件，那么数据是文件内容，直接写即可 */
         for (int i = 0; i < NEWFS_DATA_PER_FILE; i++) {
-            if(!inode->block_pointer[i]) continue;
+            if(inode->block_pointer[i] == -1) continue;
             if (newfs_driver_write(NEWFS_DATA_OFS(inode->block_pointer[i]), inode->data[i], 
                 NEWFS_BLK_SZ()) != NEWFS_ERROR_NONE) {
                 NEWFS_DBG("[%s] io error\n", __func__);
@@ -324,6 +329,7 @@ struct newfs_inode* newfs_read_inode(struct newfs_dentry * dentry, int ino) {
     else if (NEWFS_IS_REG(inode)) {
         for (int i = 0; i < NEWFS_DATA_PER_FILE; i++) {
             inode->data[i] = (uint8_t *)malloc(NEWFS_BLK_SZ());
+            if(inode->block_pointer[i] == -1) continue;
             if (newfs_driver_read(NEWFS_DATA_OFS(inode->block_pointer[i]), (uint8_t *)inode->data[i], 
                 NEWFS_BLK_SZ()) != NEWFS_ERROR_NONE) {
                 NEWFS_DBG("[%s] io error\n", __func__);
@@ -760,7 +766,7 @@ int newfs_drop_inode(struct newfs_inode* inode) {
     else if (NEWFS_IS_REG(inode)) {
         /* 释放文件对应的数据块 */
         for (int i = 0; i < NEWFS_DATA_PER_FILE; i++) {
-            if (inode->block_pointer[i]) {
+            if (inode->block_pointer[i] != -1) {
                 /* 清除数据块位图 */
                 int blk_byte = inode->block_pointer[i] / UINT8_BITS;
                 int blk_bit = inode->block_pointer[i] % UINT8_BITS;

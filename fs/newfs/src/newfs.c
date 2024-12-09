@@ -295,7 +295,7 @@ int newfs_write(const char *path, const char *buf, size_t size, off_t offset,
     // 检查并分配所需的数据块
     for (int i = blk_start; i <= blk_end && i < NEWFS_DATA_PER_FILE; i++)
     {
-        if (!inode->block_pointer[i])
+        if (inode->block_pointer[i] == -1)
         {
             // 分配新的数据块
             int ret = newfs_alloc_data_blk(inode, i);
